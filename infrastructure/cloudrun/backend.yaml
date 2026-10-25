@@ -1,0 +1,78 @@
+# Cloud Run: aether-api (public HTTPS)
+# Replace placeholders before `gcloud run services replace --region=asia-south1`.
+# Production Gemini uses Vertex ADC — do not set GEMINI_API_KEY.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aether-api
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      serviceAccountName: aether-api@imagi-ai-gpami.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 180
+      containers:
+        - image: asia-south1-docker.pkg.dev/imagi-ai-gpami/aether-hire/aether-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: PORT
+              value: "8080"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: imagi-ai-gpami
+            - name: GOOGLE_CLOUD_LOCATION
+              value: asia-south1
+            - name: GEMINI_MODEL
+              value: gemini-2.0-flash-001
+            - name: CORS_ORIGINS
+              value: https://FRONTEND_ORIGIN
+            - name: SUPABASE_URL
+              value: https://dmcnucnqtrdohodjoqks.supabase.co
+            - name: SUPABASE_PUBLISHABLE_KEY
+              value: SUPABASE_PUBLISHABLE_KEY
+            - name: GCS_BUCKET
+              value: aether-hire-resumes
+            - name: CLOUD_TASKS_QUEUE
+              value: aether-hire-tasks
+            - name: WORKER_URL
+              value: https://WORKER_URL
+            - name: DOCUMENT_AI_PROCESSOR_ID
+              value: "58f43284b34abf8e"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: latest
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-service-role
+                  key: latest
+            - name: WORKER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: worker-shared-secret
+                  key: latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 30

@@ -1,0 +1,165 @@
+# Production Cloud Build: GitHub → Artifact Registry → Cloud Run
+# Submit from repo root:
+#   gcloud builds submit --config infrastructure/cloudbuild.yaml .
+#
+# Substitutions (set via trigger or --substitutions):
+#   _NEXT_PUBLIC_API_URL
+#   _NEXT_PUBLIC_SUPABASE_URL
+#   _NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+#   _FRONTEND_ORIGIN
+#   _WORKER_URL
+#   _GCS_BUCKET
+#   _CLOUD_TASKS_QUEUE
+#   _DOCUMENT_AI_PROCESSOR_ID
+#   _SUPABASE_URL
+#   _SUPABASE_PUBLISHABLE_KEY
+#
+# Do not set GEMINI_API_KEY. Production Gemini uses Vertex ADC.
+
+substitutions:
+  _REGION: asia-south1
+  _REPOSITORY: aether-hire
+  _NEXT_PUBLIC_ENVIRONMENT: production
+  _NEXT_PUBLIC_API_URL: ""
+  _NEXT_PUBLIC_SUPABASE_URL: ""
+  _NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ""
+  _FRONTEND_ORIGIN: ""
+  _WORKER_URL: ""
+  _GCS_BUCKET: aether-hire-resumes
+  _CLOUD_TASKS_QUEUE: aether-hire-tasks
+  _DOCUMENT_AI_PROCESSOR_ID: ""
+  _SUPABASE_URL: ""
+  _SUPABASE_PUBLISHABLE_KEY: ""
+  _GEMINI_MODEL: gemini-2.0-flash-001
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s
+
+steps:
+  - id: build-api
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-api:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-api:latest
+      - backend
+
+  - id: build-worker
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-worker:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-worker:latest
+      - worker
+
+  - id: build-web
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-web:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-web:latest
+      - --build-arg
+      - NEXT_PUBLIC_ENVIRONMENT=${_NEXT_PUBLIC_ENVIRONMENT}
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_NEXT_PUBLIC_API_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SUPABASE_URL=${_NEXT_PUBLIC_SUPABASE_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${_NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      - frontend
+
+  - id: push-api
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["build-api"]
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-api"]
+
+  - id: push-worker
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["build-worker"]
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-worker"]
+
+  - id: push-web
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["build-web"]
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-web"]
+
+  - id: deploy-api
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    waitFor: ["push-api"]
+    args:
+      - run
+      - deploy
+      - aether-api
+      - --quiet
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-api:$SHORT_SHA
+      - --region=${_REGION}
+      - --port=8080
+      - --cpu=1
+      - --memory=1Gi
+      - --timeout=180
+      - --concurrency=80
+      - --ingress=all
+      - --allow-unauthenticated
+      - --service-account=aether-api@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=ENVIRONMENT=production,PORT=8080,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=${_GEMINI_MODEL},CORS_ORIGINS=${_FRONTEND_ORIGIN},SUPABASE_URL=${_SUPABASE_URL},SUPABASE_PUBLISHABLE_KEY=${_SUPABASE_PUBLISHABLE_KEY},GCS_BUCKET=${_GCS_BUCKET},CLOUD_TASKS_QUEUE=${_CLOUD_TASKS_QUEUE},WORKER_URL=${_WORKER_URL},DOCUMENT_AI_PROCESSOR_ID=${_DOCUMENT_AI_PROCESSOR_ID}
+      - --set-secrets=DATABASE_URL=database-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role:latest,WORKER_SHARED_SECRET=worker-shared-secret:latest,GITHUB_TOKEN=github-token:latest,REDDIT_CLIENT_ID=reddit-client-id:latest,REDDIT_CLIENT_SECRET=reddit-client-secret:latest
+
+  - id: deploy-worker
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    waitFor: ["push-worker"]
+    args:
+      - run
+      - deploy
+      - aether-worker
+      - --quiet
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-worker:$SHORT_SHA
+      - --region=${_REGION}
+      - --port=8080
+      - --cpu=1
+      - --memory=1Gi
+      - --timeout=300
+      - --concurrency=20
+      - --ingress=internal
+      - --no-allow-unauthenticated
+      - --service-account=aether-worker@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=ENVIRONMENT=production,PORT=8080,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=${_REGION},GEMINI_MODEL=${_GEMINI_MODEL},SUPABASE_URL=${_SUPABASE_URL},SUPABASE_PUBLISHABLE_KEY=${_SUPABASE_PUBLISHABLE_KEY},GCS_BUCKET=${_GCS_BUCKET},CLOUD_TASKS_QUEUE=${_CLOUD_TASKS_QUEUE},BACKEND_URL=${_NEXT_PUBLIC_API_URL},DOCUMENT_AI_PROCESSOR_ID=${_DOCUMENT_AI_PROCESSOR_ID}
+      - --set-secrets=DATABASE_URL=database-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role:latest,WORKER_SHARED_SECRET=worker-shared-secret:latest
+
+  - id: deploy-web
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    waitFor: ["push-web"]
+    args:
+      - run
+      - deploy
+      - aether-web
+      - --quiet
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-web:$SHORT_SHA
+      - --region=${_REGION}
+      - --port=8080
+      - --cpu=1
+      - --memory=512Mi
+      - --timeout=60
+      - --concurrency=80
+      - --ingress=all
+      - --allow-unauthenticated
+      - --service-account=aether-web@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=PORT=8080,HOSTNAME=0.0.0.0,NODE_ENV=production
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-api:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-worker:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/aether-web:$SHORT_SHA

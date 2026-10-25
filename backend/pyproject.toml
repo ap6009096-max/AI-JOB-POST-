@@ -1,0 +1,13 @@
+[project]
+name = "ai-job-post-backend"
+version = "0.1.0"
+description = "FastAPI backend for the AI Job Post recruitment platform"
+requires-python = ">=3.12"
+dependencies = []
+
+# Do not add [tool.vercel] entrypoint. Vercel hosts frontend/ as Next.js.
+# FastAPI runs on Render (Docker context backend/, uvicorn app.main:app).
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["../tests/backend"]

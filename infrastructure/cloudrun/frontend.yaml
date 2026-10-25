@@ -1,0 +1,44 @@
+# Cloud Run: aether-web (Next.js standalone)
+# Bake NEXT_PUBLIC_* at image build time via Cloud Build args.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aether-web
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      serviceAccountName: aether-web@imagi-ai-gpami.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: asia-south1-docker.pkg.dev/imagi-ai-gpami/aether-hire/aether-web:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: NODE_ENV
+              value: production
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/health
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /api/health
+            periodSeconds: 30

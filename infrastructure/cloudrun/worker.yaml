@@ -1,0 +1,75 @@
+# Cloud Run: aether-worker (internal + authenticated)
+# Invoked by Cloud Tasks with OIDC. Shared secret still accepted for break-glass.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: aether-worker
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "5"
+    spec:
+      serviceAccountName: aether-worker@imagi-ai-gpami.iam.gserviceaccount.com
+      containerConcurrency: 20
+      timeoutSeconds: 300
+      containers:
+        - image: asia-south1-docker.pkg.dev/imagi-ai-gpami/aether-hire/aether-worker:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: PORT
+              value: "8080"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: imagi-ai-gpami
+            - name: GOOGLE_CLOUD_LOCATION
+              value: asia-south1
+            - name: GEMINI_MODEL
+              value: gemini-2.0-flash-001
+            - name: SUPABASE_URL
+              value: https://dmcnucnqtrdohodjoqks.supabase.co
+            - name: SUPABASE_PUBLISHABLE_KEY
+              value: SUPABASE_PUBLISHABLE_KEY
+            - name: GCS_BUCKET
+              value: aether-hire-resumes
+            - name: CLOUD_TASKS_QUEUE
+              value: aether-hire-tasks
+            - name: BACKEND_URL
+              value: https://API_URL
+            - name: DOCUMENT_AI_PROCESSOR_ID
+              value: "58f43284b34abf8e"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: latest
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-service-role
+                  key: latest
+            - name: WORKER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: worker-shared-secret
+                  key: latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+            periodSeconds: 30

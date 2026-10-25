@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# next.js
+.next/
+out/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+.mypy_cache/
+
+# local resume uploads
+resumes/
+backend/resumes/
+
+# env and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+
+# logs and OS
+*.log
+.DS_Store
+Thumbs.db
+
+# editor (mcp.json can contain API keys)
+.cursor/
+
+# deploy
+.vercel
+supabase/.temp/
+dist/
+build/
+coverage/

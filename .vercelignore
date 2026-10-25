@@ -1,0 +1,12 @@
+# Vercel hosts only Next.js (Root Directory: frontend).
+# Exclude Python apps so Vercel does not scan FastAPI `app` in backend/worker/tests.
+# Use leading / on supabase so frontend/lib/supabase/ is NOT ignored.
+/backend
+/worker
+/infrastructure
+/supabase
+/tests
+/docs
+*.md
+.env
+.env.*

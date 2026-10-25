@@ -1,0 +1,65 @@
+# Render Blueprint. Dashboard: New → Blueprint → this repo.
+# Do not use Render's Python/FastAPI auto-detect on the repo root.
+# Docker context is ./backend (and ./worker), so the start command is
+# uvicorn app.main:app — not uvicorn backend.app.main:app.
+# Secrets are left empty (sync: false) — paste them in the Render dashboard.
+# After Vercel is live, set CORS_ORIGINS to the Vercel origin and redeploy.
+
+services:
+  - type: web
+    name: ai-job-post-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: SUPABASE_URL
+        value: https://dmcnucnqtrdohodjoqks.supabase.co
+      - key: SUPABASE_STORAGE_BUCKET
+        value: resumes
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WORKER_SHARED_SECRET
+        sync: false
+      - key: WORKER_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://aether-web-XXXX-as.a.run.app
+
+  - type: web
+    name: ai-job-post-worker
+    runtime: docker
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: SUPABASE_URL
+        value: https://dmcnucnqtrdohodjoqks.supabase.co
+      - key: SUPABASE_STORAGE_BUCKET
+        value: resumes
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WORKER_SHARED_SECRET
+        sync: false
+      - key: BACKEND_URL
+        sync: false
